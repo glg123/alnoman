@@ -39,6 +39,7 @@
     </style>
 </head>
 <body class="bg-canvas text-ink antialiased">
+@php $camp = \App\Models\CampProfile::current(); @endphp
 <div class="min-h-screen lg:flex">
 
     {{-- شريط علوي للموبايل --}}
@@ -47,7 +48,7 @@
                 class="p-2 -mr-2" aria-label="فتح القائمة">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <span class="font-bold">مخيم — إدارة البيانات</span>
+        <span class="font-bold truncate px-2">{{ $camp->name ?: 'مخيم — إدارة البيانات' }}</span>
         <span class="w-6"></span>
     </header>
 
@@ -59,9 +60,14 @@
     <aside id="sidebar"
         class="fixed lg:sticky top-0 right-0 z-50 h-screen w-72 bg-primary-dark text-white flex flex-col transition-transform duration-200 ease-out">
         <div class="flex items-center justify-between px-5 h-16 border-b border-white/10">
-            <div>
-                <p class="font-display font-extrabold text-lg leading-none">مخيم</p>
-                <p class="text-xs text-white/60 mt-1">نظام إدارة بيانات الأسر</p>
+            <div class="flex items-center gap-3 min-w-0">
+                @if($camp->logo_url)
+                    <img src="{{ $camp->logo_url }}" alt="" class="w-10 h-10 rounded-lg bg-white object-contain shrink-0">
+                @endif
+                <div class="min-w-0">
+                    <p class="font-display font-extrabold text-lg leading-none truncate">{{ $camp->name ?: 'مخيم' }}</p>
+                    <p class="text-xs text-white/60 mt-1">نظام إدارة بيانات الأسر</p>
+                </div>
             </div>
             <button type="button" onclick="document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebar-overlay').classList.remove('open');"
                     class="lg:hidden p-1" aria-label="إغلاق القائمة">
@@ -85,6 +91,12 @@
                     <a href="{{ route('admin.import.create') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 {{ request()->routeIs('admin.import.*') ? 'bg-white/10 font-semibold' : '' }}">
                         <span>استيراد من Excel</span>
                     </a>
+                    <a href="{{ route('admin.camp-profile.edit') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 {{ request()->routeIs('admin.camp-profile.*') ? 'bg-white/10 font-semibold' : '' }}">
+                        <span>الإعدادات العامة</span>
+                    </a>
+                    <a href="{{ route('admin.activity-log.index') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 {{ request()->routeIs('admin.activity-log.*') ? 'bg-white/10 font-semibold' : '' }}">
+                        <span>سجل النشاط</span>
+                    </a>
                     <p class="px-3 pt-4 pb-1 text-xs text-white/40">الاستفادات</p>
                     <a href="{{ route('admin.organizations.index') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 {{ request()->routeIs('admin.organizations.*') ? 'bg-white/10 font-semibold' : '' }}">
                         <span>المؤسسات والجمعيات</span>
@@ -105,6 +117,7 @@
         <div class="border-t border-white/10 p-4">
             <p class="text-sm font-semibold truncate">{{ auth()->user()->name }}</p>
             <p class="text-xs text-white/50 truncate mb-3">{{ auth()->user()->username }}</p>
+            <a href="{{ route('account.password.edit') }}" class="block text-right text-sm text-white/70 hover:text-white transition mb-2">تغيير كلمة المرور</a>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <button class="w-full text-right text-sm text-white/70 hover:text-white transition">تسجيل الخروج</button>

@@ -23,13 +23,15 @@
 
     <div class="bg-white border border-line rounded-2xl overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="w-full text-sm min-w-[600px]">
+            <table class="w-full text-sm min-w-[760px]">
                 <thead class="bg-canvas">
                     <tr class="text-right text-xs text-muted">
                         <th class="px-4 py-3 font-semibold">الاسم</th>
                         <th class="px-4 py-3 font-semibold">اسم المستخدم</th>
                         <th class="px-4 py-3 font-semibold">حالة البيانات</th>
+                        <th class="px-4 py-3 font-semibold">الحساب</th>
                         <th class="px-4 py-3 font-semibold">تاريخ الإنشاء</th>
+                        <th class="px-4 py-3 font-semibold">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -44,10 +46,33 @@
                                     <span class="text-xs text-muted">لم تُدخَل بعد</span>
                                 @endif
                             </td>
+                            <td class="px-4 py-3">
+                                @if($user->is_active)
+                                    <span class="text-xs font-semibold text-approved">نشط</span>
+                                @else
+                                    <span class="text-xs font-semibold text-rejected">موقوف</span>
+                                @endif
+                            </td>
                             <td class="px-4 py-3 text-muted">{{ $user->created_at->format('Y-m-d') }}</td>
+                            <td class="px-4 py-3">
+                                <div class="flex flex-wrap gap-2">
+                                    <form method="POST" action="{{ route('admin.users.reset-password', $user) }}"
+                                          onsubmit="return confirm('بدك تولّد كلمة مرور جديدة لـ {{ $user->name }}؟ كلمة المرور القديمة رح تتعطل.');">
+                                        @csrf
+                                        <button class="text-xs font-semibold border border-line rounded-lg px-3 py-1.5 hover:bg-canvas transition">إعادة تعيين كلمة المرور</button>
+                                    </form>
+                                    <form method="POST" action="{{ route('admin.users.toggle-active', $user) }}"
+                                          onsubmit="return confirm('{{ $user->is_active ? 'إيقاف حساب' : 'تفعيل حساب' }} {{ $user->name }}؟');">
+                                        @csrf
+                                        <button class="text-xs font-semibold border rounded-lg px-3 py-1.5 transition {{ $user->is_active ? 'border-rejected/40 text-rejected hover:bg-rejected/5' : 'border-approved/40 text-approved hover:bg-approved/5' }}">
+                                            {{ $user->is_active ? 'إيقاف' : 'تفعيل' }}
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="px-4 py-8 text-center text-muted">لا يوجد مستخدمون.</td></tr>
+                        <tr><td colspan="6" class="px-4 py-8 text-center text-muted">لا يوجد مستخدمون.</td></tr>
                     @endforelse
                 </tbody>
             </table>

@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
+use App\Models\Family;
 use App\Models\FamilyEditRequest;
+use App\Support\CampFiles;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -32,9 +35,32 @@ class EditRequestController extends Controller
      */
     public function approve(FamilyEditRequest $editRequest)
     {
-        DB::transaction(function () use ($editRequest) {
-            $family = $editRequest->family;
-            $data = $editRequest->payload;
+        $error = null;
+        $oldFiles = [];
+        $newFiles = [];
+
+        DB::transaction(function () use ($editRequest, &$error, &$oldFiles, &$newFiles) {
+            // قفل الصف: ضغطتين على الزر ما بنفّذوا مرتين
+            $request = FamilyEditRequest::whereKey($editRequest->id)->lockForUpdate()->first();
+
+            if (! $request || $request->status !== 'pending') {
+                $error = 'هذا الطلب تمت معالجته مسبقاً.';
+
+                return;
+            }
+
+            $family = $request->family;
+            $data = $request->payload;
+
+            $taken = Family::where('national_id', $data['national_id'])->where('id', '!=', $family->id)->exists();
+            if ($taken) {
+                $error = 'رقم الهوية المقترح مسجّل لأسرة ثانية. ارفض الطلب مع ذكر السبب.';
+
+                return;
+            }
+
+            $oldFiles = CampFiles::forFamily($family);
+            $newFiles = CampFiles::forPayload($data);
 
             $family->update([
                 'full_name'               => $data['full_name'],
@@ -63,12 +89,21 @@ class EditRequestController extends Controller
                 ]);
             }
 
-            $editRequest->update([
+            $request->update([
                 'status'      => 'approved',
                 'reviewed_by' => Auth::id(),
                 'reviewed_at' => now(),
             ]);
         });
+
+        if ($error) {
+            return back()->with('error', $error);
+        }
+
+        // الملفات القديمة اللي استُبدلت بعد الاعتماد
+        CampFiles::deleteExcept($oldFiles, $newFiles);
+
+        ActivityLog::record('edit.approved', "اعتمد طلب تعديل أسرة {$editRequest->family->full_name}");
 
         return back()->with('success', 'تم اعتماد التعديل ودمجه في بيانات الأسرة.');
     }
@@ -79,12 +114,24 @@ class EditRequestController extends Controller
             'admin_note' => ['required', 'string', 'max:500'],
         ]);
 
+        if ($editRequest->status !== 'pending') {
+            return back()->with('error', 'هذا الطلب تمت معالجته مسبقاً.');
+        }
+
         $editRequest->update([
             'status'      => 'rejected',
             'admin_note'  => $data['admin_note'],
             'reviewed_by' => Auth::id(),
             'reviewed_at' => now(),
         ]);
+
+        // الملفات الجديدة اللي رفعها المستخدم مع الطلب ما عاد إلها لزوم (باستثناء المستخدمة فعلياً بالأسرة)
+        CampFiles::deleteExcept(
+            CampFiles::forPayload($editRequest->payload),
+            CampFiles::forFamily($editRequest->family)
+        );
+
+        ActivityLog::record('edit.rejected', "رفض طلب تعديل أسرة {$editRequest->family->full_name}");
 
         return back()->with('success', 'تم رفض طلب التعديل.');
     }

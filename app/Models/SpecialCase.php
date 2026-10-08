@@ -30,7 +30,7 @@ class SpecialCase extends Model
     public function getDocumentUrlAttribute(): ?string
     {
         return $this->document_path
-            ? \Illuminate\Support\Facades\Storage::disk('public')->url($this->document_path)
+            ? route('files.case-document', $this)
             : null;
     }
 }

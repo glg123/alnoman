@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('family_id')->constrained()->cascadeOnDelete();
             $table->timestamps();
 
-            $table->unique(['benefit_distribution_id', 'family_id']);
+            $table->unique(['benefit_distribution_id', 'family_id'], 'bdf_dist_family_unique');
         });
     }
 

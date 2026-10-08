@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Family;
 use App\Models\FamilyEditRequest;
+use App\Support\CampFiles;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class FamilyController extends Controller
@@ -63,43 +63,42 @@ class FamilyController extends Controller
     }
 
     /**
-     * يخزّن صورة الهوية الجديدة إن وُجدت، ويحذف القديمة إن استُبدلت.
+     * مسار صورة الهوية: الجديدة إن رُفعت، وإلا الموجودة بقاعدة البيانات.
+     * (لا نثق بأي مسار قادم من المتصفح، وحذف القديمة يتم لاحقاً من الكنترولر.)
      */
-    protected function resolveNationalIdPhoto(Request $request, array $data): ?string
+    protected function resolveNationalIdPhoto(Request $request, ?Family $family): ?string
     {
-        $path = $data['existing_national_id_photo'] ?? null;
-
         if ($request->hasFile('national_id_photo')) {
-            if ($path) {
-                Storage::disk('public')->delete($path);
-            }
-            $path = $request->file('national_id_photo')->store('id-photos', 'public');
+            return $request->file('national_id_photo')->store('id-photos', CampFiles::DISK);
         }
 
-        return $path;
+        return $family?->national_id_photo_path;
     }
 
     /**
      * يبني مصفوفة الحالات الخاصة مع تخزين الملف المرفق إن وُجد.
+     * المرفق القديم يُقبل فقط إذا كان فعلاً تابعاً لحالة من حالات هذه الأسرة.
      */
-    protected function resolveSpecialCases(Request $request, array $data, array $childModels): array
+    protected function resolveSpecialCases(Request $request, array $data, array $childModels, ?Family $family = null): array
     {
+        $ownedDocuments = $family ? $family->specialCases->pluck('document_path')->filter()->all() : [];
         $result = [];
 
         foreach ($data['special_cases'] ?? [] as $index => $caseData) {
             $documentPath = $caseData['existing_document'] ?? null;
+            if (! in_array($documentPath, $ownedDocuments, true)) {
+                $documentPath = null;
+            }
 
             if ($request->hasFile("special_cases.$index.document")) {
-                if ($documentPath) {
-                    Storage::disk('public')->delete($documentPath);
-                }
-                $documentPath = $request->file("special_cases.$index.document")->store('special-case-documents', 'public');
+                $documentPath = $request->file("special_cases.$index.document")->store('special-case-documents', CampFiles::DISK);
             }
 
             $childIndex = $caseData['child_index'] ?? null;
 
             $result[] = [
                 'child_id'      => $childIndex !== null && $childIndex !== '' ? ($childModels[$childIndex]->id ?? null) : null,
+                'child_index'   => $childIndex,
                 'type'          => $caseData['type'],
                 'description'   => $caseData['description'] ?? null,
                 'document_path' => $documentPath,
@@ -115,7 +114,7 @@ class FamilyController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate($this->rules());
-        $nationalIdPhotoPath = $this->resolveNationalIdPhoto($request, $data);
+        $nationalIdPhotoPath = $this->resolveNationalIdPhoto($request, null);
 
         $family = DB::transaction(function () use ($data, $request, $nationalIdPhotoPath) {
             $family = Family::create([
@@ -135,6 +134,7 @@ class FamilyController extends Controller
             }
 
             foreach ($this->resolveSpecialCases($request, $data, $childModels) as $caseData) {
+                unset($caseData['child_index']);
                 $family->specialCases()->create($caseData);
             }
 
@@ -161,50 +161,75 @@ class FamilyController extends Controller
     {
         $family = Auth::user()->family()->with(['children', 'specialCases'])->firstOrFail();
         $data = $request->validate($this->rules($family->id));
-        $nationalIdPhotoPath = $this->resolveNationalIdPhoto($request, $data);
 
-        if ($family->status === 'pending') {
-            // لم تُعتمد بعد: تعديل مباشر بدون طلب موافقة إضافي
-            DB::transaction(function () use ($family, $data, $request, $nationalIdPhotoPath) {
-                $family->update([
-                    'full_name'               => $data['full_name'],
-                    'national_id'             => $data['national_id'],
-                    'national_id_photo_path'  => $nationalIdPhotoPath,
-                    'wife_name'               => $data['wife_name'] ?? null,
-                    'wife_national_id'        => $data['wife_national_id'] ?? null,
-                    'members_count'           => $data['members_count'],
-                ]);
+        $oldFiles = CampFiles::forFamily($family);
+        $nationalIdPhotoPath = $this->resolveNationalIdPhoto($request, $family);
 
-                $childModels = [];
-                $family->children()->delete();
-                foreach ($data['children'] ?? [] as $index => $childData) {
-                    $childModels[$index] = $family->children()->create($childData);
-                }
+        // pending أو rejected: تعديل مباشر، والأسرة المرفوضة ترجع للمراجعة (pending)
+        if (in_array($family->status, ['pending', 'rejected'], true)) {
+            $newCases = [];
 
-                $newCases = $this->resolveSpecialCases($request, $data, $childModels);
-                $family->specialCases()->delete();
-                foreach ($newCases as $caseData) {
-                    $family->specialCases()->create($caseData);
-                }
-            });
+            try {
+                DB::transaction(function () use ($family, $data, $request, $nationalIdPhotoPath, &$newCases) {
+                    $family->update([
+                        'full_name'               => $data['full_name'],
+                        'national_id'             => $data['national_id'],
+                        'national_id_photo_path'  => $nationalIdPhotoPath,
+                        'wife_name'               => $data['wife_name'] ?? null,
+                        'wife_national_id'        => $data['wife_national_id'] ?? null,
+                        'members_count'           => $data['members_count'],
+                        'status'                  => 'pending',
+                        'rejection_reason'        => null,
+                        'reviewed_by'             => null,
+                        'reviewed_at'             => null,
+                    ]);
+
+                    $childModels = [];
+                    $family->children()->delete();
+                    foreach ($data['children'] ?? [] as $index => $childData) {
+                        $childModels[$index] = $family->children()->create($childData);
+                    }
+
+                    $newCases = $this->resolveSpecialCases($request, $data, $childModels, $family);
+                    $family->specialCases()->delete();
+                    foreach ($newCases as $caseData) {
+                        unset($caseData['child_index']);
+                        $family->specialCases()->create($caseData);
+                    }
+                });
+            } catch (\Throwable $e) {
+                // فشل الحفظ: نحذف الملفات الجديدة اللي انرفعت للتو
+                CampFiles::deleteExcept(
+                    array_merge([$nationalIdPhotoPath], array_column($newCases, 'document_path')),
+                    $oldFiles
+                );
+                throw $e;
+            }
+
+            // الملفات القديمة اللي انستبدلت أو انحذفت
+            CampFiles::deleteExcept($oldFiles, array_merge([$nationalIdPhotoPath], array_column($newCases, 'document_path')));
 
             return redirect()->route('family.show')->with('success', 'تم تحديث البيانات.');
         }
 
-        // الأسرة معتمدة: أنشئ طلب تعديل بانتظار موافقة الأدمن.
-        // الملفات تُخزَّن فوراً على القرص، ومسارها يُحفظ داخل الـ payload لحين المراجعة.
-        $tempChildModels = []; // مؤقتاً فقط لحساب child_index داخل resolveSpecialCases (لا يُحفظ بقاعدة البيانات)
+        // الأسرة معتمدة: طلب تعديل بانتظار موافقة الأدمن.
+        // الملفات القديمة المعتمدة ما بتنحذف هون، بتنحذف عند اعتماد الطلب.
+        $tempChildModels = [];
         foreach (($data['children'] ?? []) as $index => $childData) {
             $tempChildModels[$index] = (object) ['id' => null];
         }
 
         $payload = $data;
-        unset($payload['national_id_photo']); // كائن UploadedFile لا يمكن تخزينه بالـ JSON، المسار المخزَّن كافٍ
+        unset($payload['national_id_photo']);
+        unset($payload['existing_national_id_photo']);
         $payload['national_id_photo_path'] = $nationalIdPhotoPath;
         $payload['special_cases'] = array_map(function ($case) {
-            unset($case['document']); // لا يمكن تخزين ملف داخل JSON، فقط المسار المخزَّن مسبقاً
+            unset($case['child_id']);
+
             return $case;
-        }, $this->resolveSpecialCases($request, $data, $tempChildModels));
+        }, $this->resolveSpecialCases($request, $data, $tempChildModels, $family));
+
+        $previousPending = FamilyEditRequest::where('family_id', $family->id)->where('status', 'pending')->get();
 
         FamilyEditRequest::create([
             'family_id' => $family->id,
@@ -212,6 +237,15 @@ class FamilyController extends Controller
             'payload'   => $payload,
             'status'    => 'pending',
         ]);
+
+        // طلب جديد يحلّ مكان الطلب المعلّق السابق، ونحذف ملفاته الجديدة اللي ما عاد إلها لزوم
+        foreach ($previousPending as $old) {
+            CampFiles::deleteExcept(
+                CampFiles::forPayload($old->payload),
+                array_merge($oldFiles, CampFiles::forPayload($payload))
+            );
+            $old->delete();
+        }
 
         return redirect()->route('family.show')
             ->with('success', 'تم إرسال طلب التعديل، بانتظار موافقة الإدارة.');

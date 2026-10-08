@@ -11,7 +11,7 @@
         'wife_national_id' => 'رقم هوية الزوجة',
         'members_count' => 'عدد الأفراد',
     ];
-    $proposedPhotoUrl = ! empty($proposed['national_id_photo_path']) ? \Illuminate\Support\Facades\Storage::disk('public')->url($proposed['national_id_photo_path']) : null;
+    $proposedPhotoUrl = ! empty($proposed['national_id_photo_path']) ? route('files.edit-request-photo', $editRequest) : null;
 @endphp
 
 @section('content')
@@ -73,12 +73,12 @@
         <div class="bg-white border border-line rounded-2xl p-5 sm:p-6 mb-8">
             <h2 class="font-bold text-sm mb-3">حالات خاصة — المقترح ({{ count($proposed['special_cases']) }})</h2>
             <ul class="space-y-2">
-                @foreach($proposed['special_cases'] as $case)
+                @foreach($proposed['special_cases'] as $caseIndex => $case)
                     <li class="text-sm border-b border-line last:border-0 pb-2">
                         <span class="font-semibold">{{ $case['type'] ?? '—' }}</span>
                         @if(!empty($case['description'])) <span class="text-muted"> — {{ $case['description'] }}</span> @endif
                         @if(!empty($case['document_path']))
-                            <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($case['document_path']) }}" target="_blank"
+                            <a href="{{ route('files.edit-request-case', [$editRequest, $caseIndex]) }}" target="_blank"
                                class="text-xs font-semibold text-primary hover:text-primary-dark underline block mt-0.5">عرض المرفق</a>
                         @endif
                     </li>

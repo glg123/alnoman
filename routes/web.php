@@ -16,7 +16,13 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-Route::get('/', fn () => redirect()->route('login'));
+Route::get('/', function () {
+    if (! auth()->check()) {
+        return redirect()->route('login');
+    }
+
+    return redirect()->route(auth()->user()->isAdmin() ? 'admin.families.index' : 'family.show');
+});
 
 Route::middleware(['guest'])->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');
@@ -62,5 +68,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/benefits', [BenefitDistributionController::class, 'store'])->name('benefits.store');
         Route::get('/benefits/{benefit}', [BenefitDistributionController::class, 'show'])->name('benefits.show');
     });
-    require __DIR__ . '/admin-import.php';
 });
+
+// استيراد الأسر من Excel
+require __DIR__ . '/admin-import.php';

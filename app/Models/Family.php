@@ -21,12 +21,15 @@ class Family extends Model
         'rejection_reason',
         'approved_by',
         'approved_at',
+        'reviewed_by',
+        'reviewed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'approved_at' => 'datetime',
+            'reviewed_at' => 'datetime',
         ];
     }
 
@@ -73,7 +76,7 @@ class Family extends Model
     public function getNationalIdPhotoUrlAttribute(): ?string
     {
         return $this->national_id_photo_path
-            ? \Illuminate\Support\Facades\Storage::disk('public')->url($this->national_id_photo_path)
+            ? route('files.id-photo', $this)
             : null;
     }
 }

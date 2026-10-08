@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Family;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -41,8 +42,12 @@ class FamilyApprovalController extends Controller
             'status'      => 'approved',
             'approved_by' => Auth::id(),
             'approved_at' => now(),
+            'reviewed_by' => Auth::id(),
+            'reviewed_at' => now(),
             'rejection_reason' => null,
         ]);
+
+        ActivityLog::record('family.approved', "اعتمد بيانات أسرة {$family->full_name}");
 
         return back()->with('success', 'تم اعتماد بيانات الأسرة.');
     }
@@ -56,9 +61,13 @@ class FamilyApprovalController extends Controller
         $family->update([
             'status'            => 'rejected',
             'rejection_reason'  => $data['rejection_reason'],
-            'approved_by'       => Auth::id(),
-            'approved_at'       => now(),
+            'approved_by'       => null,
+            'approved_at'       => null,
+            'reviewed_by'       => Auth::id(),
+            'reviewed_at'       => now(),
         ]);
+
+        ActivityLog::record('family.rejected', "رفض بيانات أسرة {$family->full_name}");
 
         return back()->with('success', 'تم رفض البيانات مع تسجيل السبب.');
     }
