@@ -62,4 +62,5 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/benefits', [BenefitDistributionController::class, 'store'])->name('benefits.store');
         Route::get('/benefits/{benefit}', [BenefitDistributionController::class, 'show'])->name('benefits.show');
     });
+    require __DIR__ . '/admin-import.php';
 });

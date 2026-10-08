@@ -4,10 +4,16 @@
 @section('content')
     <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
         <h1 class="text-xl font-bold">المستخدمون</h1>
-        <a href="{{ route('admin.users.create') }}"
-           class="bg-primary hover:bg-primary-dark transition text-white font-semibold rounded-lg px-5 py-2.5 text-sm">
-            + إنشاء مستخدم جديد
-        </a>
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ route('admin.import.create') }}"
+               class="border border-line bg-white hover:bg-canvas transition font-semibold rounded-lg px-5 py-2.5 text-sm">
+                استيراد من Excel
+            </a>
+            <a href="{{ route('admin.users.create') }}"
+               class="bg-primary hover:bg-primary-dark transition text-white font-semibold rounded-lg px-5 py-2.5 text-sm">
+                + إنشاء مستخدم جديد
+            </a>
+        </div>
     </div>
 
     <form method="GET" class="mb-5">

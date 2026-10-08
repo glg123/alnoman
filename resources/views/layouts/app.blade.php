@@ -82,6 +82,9 @@
                     <a href="{{ route('admin.users.index') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 {{ request()->routeIs('admin.users.*') ? 'bg-white/10 font-semibold' : '' }}">
                         <span>المستخدمون</span>
                     </a>
+                    <a href="{{ route('admin.import.create') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 {{ request()->routeIs('admin.import.*') ? 'bg-white/10 font-semibold' : '' }}">
+                        <span>استيراد من Excel</span>
+                    </a>
                     <p class="px-3 pt-4 pb-1 text-xs text-white/40">الاستفادات</p>
                     <a href="{{ route('admin.organizations.index') }}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 {{ request()->routeIs('admin.organizations.*') ? 'bg-white/10 font-semibold' : '' }}">
                         <span>المؤسسات والجمعيات</span>
